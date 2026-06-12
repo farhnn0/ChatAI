@@ -14,7 +14,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarTrigger,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { PenSquare, MessageSquare, Search, Settings, MoreHorizontal, Pin, Edit2, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -73,7 +72,7 @@ export function ChatSidebar({
 
   return (
     <Sidebar collapsible="icon" className="border-r border-zinc-850">
-      <SidebarHeader className="p-3 gap-2.5 flex flex-col">
+      <SidebarHeader className="p-2 gap-2 flex flex-col">
         {/* Row 1: Logo & Sidebar Toggle Trigger */}
         <div className="flex items-center justify-between w-full group-data-[collapsible=icon]:justify-center">
           <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest pl-1.5 group-data-[collapsible=icon]:hidden">
@@ -86,7 +85,7 @@ export function ChatSidebar({
         <div className="flex items-center w-full">
           <button
             onClick={onNewChat}
-            className="flex-1 flex items-center justify-start gap-2 h-8 px-2.5 bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-850 text-zinc-300 hover:text-zinc-100 rounded-lg text-xs transition-colors group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center shrink-0 cursor-pointer"
+            className="flex-1 flex items-center justify-start gap-2 h-8 px-2.5 bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-855 text-zinc-300 hover:text-zinc-100 rounded-lg text-xs transition-colors group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center shrink-0 cursor-pointer"
             title="New Chat"
           >
             <PenSquare className="h-3.5 w-3.5 shrink-0" />
@@ -96,7 +95,7 @@ export function ChatSidebar({
 
         {/* Row 3: Search bar */}
         <div className="relative w-full group-data-[collapsible=icon]:hidden">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-600" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-650" />
           <Input
             placeholder="Search"
             value={searchQuery}
@@ -106,7 +105,7 @@ export function ChatSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-2">
+      <SidebarContent>
         <SidebarGroup className="py-1">
           <SidebarGroupContent>
             <SidebarMenu>
@@ -198,7 +197,7 @@ export function ChatSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-3 mt-auto border-t border-zinc-850/50">
+      <SidebarFooter className="p-2 mt-auto border-t border-zinc-850/50">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
