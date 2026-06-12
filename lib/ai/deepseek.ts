@@ -36,7 +36,16 @@ export const handleDeepSeekRequest = async (
   });
 
   if (!response.ok) {
-    throw new Error("DeepSeek request failed. Check your API key or account balance.");
+    let errorDetails = "Unknown error";
+    try {
+      const errJson = await response.json();
+      errorDetails = errJson.error?.message || JSON.stringify(errJson);
+    } catch {
+      try {
+        errorDetails = await response.text();
+      } catch {}
+    }
+    throw new Error(`DeepSeek API Error (Status ${response.status}): ${errorDetails}`);
   }
 
   const data = await response.json();
@@ -82,7 +91,16 @@ export const handleDeepSeekStream = async (
   });
 
   if (!response.ok) {
-    throw new Error("DeepSeek request failed. Check your API key or account balance.");
+    let errorDetails = "Unknown error";
+    try {
+      const errJson = await response.json();
+      errorDetails = errJson.error?.message || JSON.stringify(errJson);
+    } catch {
+      try {
+        errorDetails = await response.text();
+      } catch {}
+    }
+    throw new Error(`DeepSeek API Error (Status ${response.status}): ${errorDetails}`);
   }
 
   const encoder = new TextEncoder();
