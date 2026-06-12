@@ -9,6 +9,13 @@ export const modelOptions: ModelOption[] = [
     description: "Local model for daily coding and experiments.",
   },
   {
+    provider: "ollama",
+    model: "llama3.1:8b",
+    label: "Local Llama 3.1",
+    badge: "Free",
+    description: "General purpose local model for conversation and general tasks.",
+  },
+  {
     provider: "deepseek",
     model: "deepseek-v4-flash",
     label: "DeepSeek Flash",

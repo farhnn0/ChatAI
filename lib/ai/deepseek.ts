@@ -47,3 +47,94 @@ export const handleDeepSeekRequest = async (
     model: request.model,
   };
 };
+
+export const handleDeepSeekStream = async (
+  request: ChatRequest
+): Promise<ReadableStream> => {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error("DeepSeek API key is not configured.");
+  }
+
+  let actualModel = request.model;
+  if (actualModel === "deepseek-v4-flash") {
+    actualModel = "deepseek-chat";
+  } else if (actualModel === "deepseek-v4-pro") {
+    actualModel = "deepseek-reasoner";
+  }
+
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: actualModel,
+      messages: request.messages,
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 4096,
+      top_p: 0.9,
+      frequency_penalty: 0.3,
+      presence_penalty: 0.2,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("DeepSeek request failed. Check your API key or account balance.");
+  }
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      if (!response.body) {
+        controller.close();
+        return;
+      }
+
+      const reader = response.body.getReader();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          
+          // Save the last partial line back to buffer
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const cleanLine = line.trim();
+            if (!cleanLine) continue;
+
+            if (cleanLine.startsWith("data: ")) {
+              const dataStr = cleanLine.slice(6).trim();
+              if (dataStr === "[DONE]") {
+                break;
+              }
+              try {
+                const json = JSON.parse(dataStr);
+                const chunkText = json.choices?.[0]?.delta?.content || "";
+                if (chunkText) {
+                  controller.enqueue(encoder.encode(chunkText));
+                }
+              } catch (e) {
+                console.error("Failed to parse DeepSeek SSE JSON chunk:", dataStr, e);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        controller.error(err);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+};

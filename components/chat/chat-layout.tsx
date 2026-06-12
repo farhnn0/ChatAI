@@ -81,6 +81,24 @@ export function ChatLayout() {
     // Update state immediately for user message
     updateSession(currentSession);
     
+    const aiMsgId = uuidv4();
+    const initialAiMsg: Message = {
+      id: aiMsgId,
+      role: "assistant",
+      content: "",
+      createdAt: Date.now(),
+      model: selectedModel.model,
+      provider: selectedModel.provider
+    };
+
+    // Update session state with both user and initial empty assistant message
+    const generatingSession = {
+      ...currentSession,
+      messages: [...updatedMessages, initialAiMsg],
+      updatedAt: Date.now()
+    };
+    updateSession(generatingSession);
+
     try {
       // Build context (last 10 messages)
       const contextMessages = updatedMessages.slice(-10).map(m => ({
@@ -100,46 +118,79 @@ export function ChatLayout() {
         body: JSON.stringify(payload)
       });
       
-      const data = await res.json();
-      
       if (!res.ok) {
-        throw new Error(data.error || "Failed to generate response");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to generate response");
       }
       
-      const aiMsg: Message = {
-        id: uuidv4(),
-        role: "assistant",
-        content: data.content,
-        createdAt: Date.now(),
-        model: data.model,
-        provider: data.provider
-      };
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No reader in response body");
+
+      const decoder = new TextDecoder();
+      let streamedContent = "";
       
-      currentSession = {
-        ...currentSession,
-        messages: [...currentSession.messages, aiMsg],
-        updatedAt: Date.now()
-      };
-      
-      updateSession(currentSession);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        streamedContent += chunk;
+        
+        // Update sessions state directly to reflect stream chunks in real-time
+        setSessions(prev => {
+          return prev.map(s => {
+            if (s.id === currentSessionId) {
+              return {
+                ...s,
+                messages: s.messages.map(m => {
+                  if (m.id === aiMsgId) {
+                    return { ...m, content: streamedContent };
+                  }
+                  return m;
+                })
+              };
+            }
+            return s;
+          });
+        });
+      }
+
+      // Save the final state to localStorage once streaming is complete
+      setSessions(prev => {
+        const finalSessions = prev.map(s => {
+          if (s.id === currentSessionId) {
+            return {
+              ...s,
+              updatedAt: Date.now()
+            };
+          }
+          return s;
+        });
+        saveSessions(finalSessions);
+        return finalSessions;
+      });
       
     } catch (err: any) {
-      // Add error message to chat
-      const errorMsg: Message = {
-        id: uuidv4(),
-        role: "assistant",
-        content: `Error: ${err.message}`,
-        createdAt: Date.now(),
-        model: "System"
-      };
-      
-      currentSession = {
-        ...currentSession,
-        messages: [...currentSession.messages, errorMsg],
-        updatedAt: Date.now()
-      };
-      
-      updateSession(currentSession);
+      // Update the empty assistant message with the error details
+      setSessions(prev => {
+        const updated = prev.map(s => {
+          if (s.id === currentSessionId) {
+            return {
+              ...s,
+              messages: s.messages.map(m => {
+                if (m.id === aiMsgId) {
+                  return { ...m, content: `Error: ${err.message}` };
+                }
+                return m;
+              }),
+              updatedAt: Date.now()
+            };
+          }
+          return s;
+        });
+        saveSessions(updated);
+        return updated;
+      });
     } finally {
       setIsGenerating(false);
     }

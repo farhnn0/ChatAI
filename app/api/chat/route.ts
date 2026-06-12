@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ChatRequest, ChatErrorResponse } from "@/lib/types/chat";
-import { routeChatRequest } from "@/lib/ai/provider-router";
+import { routeChatRequestStream } from "@/lib/ai/provider-router";
 
 export async function POST(req: Request) {
   try {
@@ -20,8 +20,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const response = await routeChatRequest(body);
-    return NextResponse.json(response);
+    const stream = await routeChatRequestStream(body);
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache, no-transform",
+      },
+    });
   } catch (error: any) {
     console.error("API Chat Error:", error);
     return NextResponse.json(
