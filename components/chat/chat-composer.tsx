@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ModelSelector } from "./model-selector";
 import { ModelOption } from "@/lib/types/chat";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ interface ChatComposerProps {
   onSendMessage: (content: string) => void;
   selectedModel: ModelOption;
   onModelChange: (model: ModelOption) => void;
-  models: ModelOption[];
   isGenerating: boolean;
 }
 
@@ -19,7 +18,6 @@ export function ChatComposer({
   onSendMessage,
   selectedModel,
   onModelChange,
-  models,
   isGenerating
 }: ChatComposerProps) {
   const [content, setContent] = useState("");
@@ -66,7 +64,6 @@ export function ChatComposer({
           <ModelSelector
             selectedModel={selectedModel}
             onModelChange={onModelChange}
-            models={models}
             disabled={isGenerating}
           />
           
