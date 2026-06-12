@@ -6,7 +6,7 @@ import { ChatHeader } from "./chat-header";
 import { ChatMessageList } from "./chat-message-list";
 import { ChatComposer } from "./chat-composer";
 import { ChatSession, Message, ModelOption, ChatRequest } from "@/lib/types/chat";
-import { defaultModel } from "@/lib/ai/models";
+import { defaultModel, modelOptions } from "@/lib/ai/models";
 import { getStoredSessions, saveSessions } from "@/lib/storage/chat-storage";
 import { v4 as uuidv4 } from "uuid";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -16,6 +16,7 @@ export function ChatLayout() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelOption>(defaultModel);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [models, setModels] = useState<ModelOption[]>(modelOptions);
 
   useEffect(() => {
     // Load state from localStorage on mount
@@ -27,6 +28,19 @@ export function ChatLayout() {
     } else {
       createNewSession();
     }
+
+    const fetchModels = async () => {
+      try {
+        const res = await fetch("/api/models");
+        if (res.ok) {
+          const data = await res.json();
+          setModels(data);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch dynamic models", err);
+      }
+    };
+    fetchModels();
   }, []);
 
   const createNewSession = () => {
@@ -234,6 +248,7 @@ export function ChatLayout() {
             onSendMessage={handleSendMessage}
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
+            models={models}
             isGenerating={isGenerating}
           />
         </div>

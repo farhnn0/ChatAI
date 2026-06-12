@@ -8,6 +8,14 @@ export const handleDeepSeekRequest = async (
     throw new Error("DeepSeek API key is not configured.");
   }
 
+  // Map custom UI model IDs to actual DeepSeek API model endpoints
+  let actualModel = request.model;
+  if (actualModel === "deepseek-v4-flash") {
+    actualModel = "deepseek-chat";
+  } else if (actualModel === "deepseek-v4-pro") {
+    actualModel = "deepseek-reasoner";
+  }
+
   // Use OpenAI compatible endpoint for DeepSeek
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -16,7 +24,7 @@ export const handleDeepSeekRequest = async (
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: request.model,
+      model: actualModel,
       messages: request.messages,
       stream: false,
     }),
