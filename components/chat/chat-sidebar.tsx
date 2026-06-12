@@ -60,7 +60,8 @@ export function ChatSidebar({
   };
 
   const filteredSessions = sessions.filter(session =>
-    session.title.toLowerCase().includes(searchQuery.toLowerCase())
+    session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    session.messages.some(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Sort sessions: pinned first, then by updatedAt desc

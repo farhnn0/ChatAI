@@ -8,9 +8,10 @@ import { Loader2 } from "lucide-react";
 interface ChatMessageListProps {
   messages: Message[];
   isGenerating: boolean;
+  onRegenerate?: (messageId: string) => void;
 }
 
-export function ChatMessageList({ messages, isGenerating }: ChatMessageListProps) {
+export function ChatMessageList({ messages, isGenerating, onRegenerate }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(messages.length);
 
@@ -53,19 +54,26 @@ export function ChatMessageList({ messages, isGenerating }: ChatMessageListProps
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" ref={scrollRef}>
-      <div className="flex flex-col pb-4">
+    <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin" ref={scrollRef}>
+      <div className="mx-auto w-full max-w-4xl px-4 py-8 pb-32 flex flex-col">
         {messages.map((message) => {
           // Hide rendering of empty assistant message (which is handled by Thinking...)
           if (message.role === "assistant" && !message.content.trim()) {
             return null;
           }
-          return <ChatMessage key={message.id} message={message} />;
+          return (
+            <ChatMessage 
+              key={message.id} 
+              message={message} 
+              onRegenerate={onRegenerate}
+              isGenerating={isGenerating}
+            />
+          );
         })}
         
         {showThinking && (
-          <div className="w-full py-2.5 px-4">
-            <div className="flex w-full max-w-4xl mx-auto justify-start">
+          <div className="w-full py-2.5">
+            <div className="flex w-full justify-start">
               <div className="max-w-[75%] md:max-w-[70%] rounded-2xl rounded-tl-xs bg-zinc-900 border border-zinc-800/80 px-4 py-3 text-sm flex items-center gap-2 text-zinc-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>Thinking...</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatHeader } from "./chat-header";
 import { ChatMessageList } from "./chat-message-list";
@@ -16,6 +16,7 @@ export function ChatLayout() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelOption>(defaultModel);
   const [isGenerating, setIsGenerating] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // Load state from localStorage on mount
@@ -99,6 +100,9 @@ export function ChatLayout() {
     };
     updateSession(generatingSession);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       // Build context (last 10 messages)
       const contextMessages = updatedMessages.slice(-10).map(m => ({
@@ -115,7 +119,8 @@ export function ChatLayout() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
       
       if (!res.ok) {
@@ -171,28 +176,208 @@ export function ChatLayout() {
       });
       
     } catch (err: any) {
-      // Update the empty assistant message with the error details
+      if (err.name === "AbortError") {
+        // If aborted, save the current state as-is to localStorage
+        setSessions(prev => {
+          const finalSessions = prev.map(s => {
+            if (s.id === currentSessionId) {
+              return {
+                ...s,
+                updatedAt: Date.now()
+              };
+            }
+            return s;
+          });
+          saveSessions(finalSessions);
+          return finalSessions;
+        });
+      } else {
+        // Update the empty assistant message with the error details
+        setSessions(prev => {
+          const updated = prev.map(s => {
+            if (s.id === currentSessionId) {
+              return {
+                ...s,
+                messages: s.messages.map(m => {
+                  if (m.id === aiMsgId) {
+                    return { ...m, content: `Error: ${err.message}` };
+                  }
+                  return m;
+                }),
+                updatedAt: Date.now()
+              };
+            }
+            return s;
+          });
+          saveSessions(updated);
+          return updated;
+        });
+      }
+    } finally {
+      setIsGenerating(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsGenerating(false);
+  };
+
+  const handleRegenerate = async (messageId: string) => {
+    if (isGenerating || !currentSessionId) return;
+
+    let currentSession = sessions.find(s => s.id === currentSessionId);
+    if (!currentSession) return;
+
+    const messages = currentSession.messages;
+    const aiIndex = messages.findIndex(m => m.id === messageId);
+    if (aiIndex === -1) return;
+
+    const userIndex = aiIndex - 1;
+    if (userIndex < 0 || messages[userIndex].role !== "user") return;
+
+    setIsGenerating(true);
+
+    // Trim messages to keep only up to the user message
+    const trimmedMessages = messages.slice(0, aiIndex);
+
+    // Create a new empty assistant message
+    const aiMsgId = uuidv4();
+    const initialAiMsg: Message = {
+      id: aiMsgId,
+      role: "assistant",
+      content: "",
+      createdAt: Date.now(),
+      model: selectedModel.model,
+      provider: selectedModel.provider
+    };
+
+    // Update state with trimmed messages and new empty assistant message
+    const generatingSession = {
+      ...currentSession,
+      messages: [...trimmedMessages, initialAiMsg],
+      updatedAt: Date.now()
+    };
+    updateSession(generatingSession);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      // Build context (last 10 messages from the trimmed list)
+      const contextMessages = trimmedMessages.slice(-10).map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      const payload: ChatRequest = {
+        provider: selectedModel.provider,
+        model: selectedModel.model,
+        messages: contextMessages
+      };
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to generate response");
+      }
+      
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No reader in response body");
+
+      const decoder = new TextDecoder();
+      let streamedContent = "";
+      
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        streamedContent += chunk;
+        
+        // Update sessions state directly to reflect stream chunks in real-time
+        setSessions(prev => {
+          return prev.map(s => {
+            if (s.id === currentSessionId) {
+              return {
+                ...s,
+                messages: s.messages.map(m => {
+                  if (m.id === aiMsgId) {
+                    return { ...m, content: streamedContent };
+                  }
+                  return m;
+                })
+              };
+            }
+            return s;
+          });
+        });
+      }
+
+      // Save the final state to localStorage once streaming is complete
       setSessions(prev => {
-        const updated = prev.map(s => {
+        const finalSessions = prev.map(s => {
           if (s.id === currentSessionId) {
             return {
               ...s,
-              messages: s.messages.map(m => {
-                if (m.id === aiMsgId) {
-                  return { ...m, content: `Error: ${err.message}` };
-                }
-                return m;
-              }),
               updatedAt: Date.now()
             };
           }
           return s;
         });
-        saveSessions(updated);
-        return updated;
+        saveSessions(finalSessions);
+        return finalSessions;
       });
+      
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        setSessions(prev => {
+          const finalSessions = prev.map(s => {
+            if (s.id === currentSessionId) {
+              return {
+                ...s,
+                updatedAt: Date.now()
+              };
+            }
+            return s;
+          });
+          saveSessions(finalSessions);
+          return finalSessions;
+        });
+      } else {
+        setSessions(prev => {
+          const updated = prev.map(s => {
+            if (s.id === currentSessionId) {
+              return {
+                ...s,
+                messages: s.messages.map(m => {
+                  if (m.id === aiMsgId) {
+                    return { ...m, content: `Error: ${err.message}` };
+                  }
+                  return m;
+                }),
+                updatedAt: Date.now()
+              };
+            }
+            return s;
+          });
+          saveSessions(updated);
+          return updated;
+        });
+      }
     } finally {
       setIsGenerating(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -260,7 +445,7 @@ export function ChatLayout() {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-[#09090B] text-zinc-100">
+      <div className="flex h-dvh w-full overflow-hidden bg-[#09090B] text-zinc-100">
         <ChatSidebar 
           sessions={sessions}
           currentSessionId={currentSessionId}
@@ -271,7 +456,7 @@ export function ChatLayout() {
           onDeleteSession={handleDeleteSession}
         />
         
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <ChatHeader 
             title={currentSession?.title || ""}
           />
@@ -279,6 +464,7 @@ export function ChatLayout() {
           <ChatMessageList 
             messages={currentSession?.messages || []}
             isGenerating={isGenerating}
+            onRegenerate={handleRegenerate}
           />
           
           <ChatComposer 
@@ -286,6 +472,7 @@ export function ChatLayout() {
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
             isGenerating={isGenerating}
+            onStopGeneration={handleStopGeneration}
           />
         </div>
       </div>
