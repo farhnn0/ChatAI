@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface ModelSelectorProps {
   selectedModel: ModelOption;
@@ -20,10 +21,16 @@ interface ModelSelectorProps {
 export function ModelSelector({ selectedModel, onModelChange, disabled }: ModelSelectorProps) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger disabled={disabled} className="flex items-center gap-2 rounded-xl bg-zinc-900/50 hover:bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition-colors border border-zinc-800/50">
-        <span>{selectedModel.label}</span>
-        <ChevronDown className="h-3 w-3 text-zinc-500" />
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger render={
+        <Button
+          variant="outline"
+          className="flex items-center gap-2 rounded-xl"
+          disabled={disabled}
+        >
+          {selectedModel.label}
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+      } />
       <DropdownMenuContent
         align="start"
         className="w-[280px] bg-zinc-900 border-zinc-800 text-zinc-100 p-2 rounded-xl shadow-xl"

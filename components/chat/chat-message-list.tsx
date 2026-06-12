@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { Message } from "@/lib/types/chat";
 import { ChatMessage } from "./chat-message";
 import { Loader2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ChatMessageListProps {
   messages: Message[];
@@ -32,7 +31,7 @@ export function ChatMessageList({ messages, isGenerating }: ChatMessageListProps
   }
 
   return (
-    <ScrollArea className="flex-1" ref={scrollRef}>
+    <div className="flex-1 overflow-y-auto" ref={scrollRef}>
       <div className="flex flex-col pb-4">
         {messages.map((message) => (
           <ChatMessage key={message.id} message={message} />
@@ -48,6 +47,6 @@ export function ChatMessageList({ messages, isGenerating }: ChatMessageListProps
           </div>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
