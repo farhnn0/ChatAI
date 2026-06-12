@@ -12,12 +12,34 @@ interface ChatMessageListProps {
 
 export function ChatMessageList({ messages, isGenerating }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevLengthRef = useRef(messages.length);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const currentLength = messages.length;
+    const hasNewMessage = currentLength > prevLengthRef.current;
+    prevLengthRef.current = currentLength;
+
+    // Check if the user is close to the bottom (within a 150px threshold)
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 150;
+
+    // Scroll to bottom if:
+    // 1. A new message has been added (e.g., user just submitted a message)
+    // 2. The AI is generating and the user is already at the bottom (pin to bottom during streaming)
+    if (hasNewMessage || (isGenerating && isAtBottom)) {
+      container.scrollTop = container.scrollHeight;
     }
   }, [messages, isGenerating]);
+
+  // Show "Thinking..." indicator only if AI is generating AND the assistant's message is empty/not started
+  const lastMessage = messages[messages.length - 1];
+  const showThinking = isGenerating && (
+    !lastMessage || 
+    lastMessage.role !== "assistant" || 
+    !lastMessage.content.trim()
+  );
 
   if (messages.length === 0) {
     return (
@@ -33,10 +55,15 @@ export function ChatMessageList({ messages, isGenerating }: ChatMessageListProps
   return (
     <div className="flex-1 overflow-y-auto" ref={scrollRef}>
       <div className="flex flex-col pb-4">
-        {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
-        ))}
-        {isGenerating && (
+        {messages.map((message) => {
+          // Hide rendering of empty assistant message (which is handled by Thinking...)
+          if (message.role === "assistant" && !message.content.trim()) {
+            return null;
+          }
+          return <ChatMessage key={message.id} message={message} />;
+        })}
+        
+        {showThinking && (
           <div className="w-full py-2.5 px-4">
             <div className="flex w-full max-w-4xl mx-auto justify-start">
               <div className="max-w-[75%] md:max-w-[70%] rounded-2xl rounded-tl-xs bg-zinc-900 border border-zinc-800/80 px-4 py-3 text-sm flex items-center gap-2 text-zinc-500">
