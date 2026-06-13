@@ -17,7 +17,7 @@ import { v4 as uuidv4 } from "uuid";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { MemoryDialog } from "../memory/memory-dialog";
 import { buildSystemPrompt } from "@/lib/memory/memory-context";
-import { detectAndSaveMemory } from "@/lib/memory/memory-detector";
+import { detectAndSaveMemory, autoExtractMemories } from "@/lib/memory/memory-detector";
 
 export function ChatLayout() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -227,6 +227,14 @@ export function ChatLayout() {
         saveSessions(finalSessions);
         return finalSessions;
       });
+
+      // Fire-and-forget: auto-extract memories from the conversation
+      const lastMessages = [...updatedMessages.slice(-6), { role: "assistant" as const, content: streamedContent }];
+      autoExtractMemories(
+        selectedModel.provider,
+        selectedModel.model,
+        lastMessages.map(m => ({ role: m.role, content: m.content }))
+      ).catch(() => {});
       
     } catch (err: any) {
       if (err.name === "AbortError") {
@@ -401,6 +409,14 @@ export function ChatLayout() {
         saveSessions(finalSessions);
         return finalSessions;
       });
+
+      // Fire-and-forget: auto-extract memories from the regenerated conversation
+      const lastMessages = [...trimmedMessages.slice(-6), { role: "assistant" as const, content: streamedContent }];
+      autoExtractMemories(
+        selectedModel.provider,
+        selectedModel.model,
+        lastMessages.map(m => ({ role: m.role, content: m.content }))
+      ).catch(() => {});
       
     } catch (err: any) {
       if (err.name === "AbortError") {
