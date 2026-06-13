@@ -55,7 +55,7 @@ export function ChatMessageList({ messages, isGenerating, onRegenerate }: ChatMe
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin" ref={scrollRef}>
-      <div className="mx-auto w-full max-w-4xl px-4 py-8 pb-32 flex flex-col">
+      <div className="mx-auto w-full max-w-4xl px-4 py-8 pb-40 flex flex-col gap-1">
         {messages.map((message) => {
           // Hide rendering of empty assistant message (which is handled by Thinking...)
           if (message.role === "assistant" && !message.content.trim()) {
@@ -72,11 +72,21 @@ export function ChatMessageList({ messages, isGenerating, onRegenerate }: ChatMe
         })}
         
         {showThinking && (
-          <div className="w-full py-2.5">
-            <div className="flex w-full justify-start">
-              <div className="max-w-[75%] md:max-w-[70%] rounded-2xl rounded-tl-xs bg-zinc-900 border border-zinc-800/80 px-4 py-3 text-sm flex items-center gap-2 text-zinc-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>Thinking...</span>
+          <div className="w-full py-4 flex justify-start">
+            <div className="flex w-full max-w-[90%] md:max-w-3xl lg:max-w-4xl items-start gap-4">
+              <div className="shrink-0 pt-1 hidden sm:flex opacity-60">
+                <div className="h-8 w-8 rounded-full bg-[#131316] border border-zinc-800/80 flex items-center justify-center text-zinc-300 shadow-sm">
+                  <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+                </div>
+              </div>
+              <div className="flex flex-col min-w-0 w-full items-start">
+                <div className="flex items-center gap-2 mb-1.5 ml-1 select-none opacity-60">
+                  <span className="text-xs font-medium text-zinc-400">AI Assistant</span>
+                </div>
+                <div className="rounded-[20px] rounded-tl-sm bg-[#131316] border border-zinc-800/60 px-5 py-4 text-sm flex items-center gap-2.5 text-zinc-400 shadow-sm">
+                  <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+                  <span className="animate-pulse">Thinking...</span>
+                </div>
               </div>
             </div>
           </div>

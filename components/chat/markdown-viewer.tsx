@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 
 interface MarkdownViewerProps {
@@ -8,27 +10,80 @@ interface MarkdownViewerProps {
 }
 
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
-  // Split content by code block markers (e.g. ```javascript\n...\n```)
-  const parts = content.split(/(\`\`\`[a-zA-Z0-9_-]*\n[\s\S]*?\`\`\`)/g);
-
   return (
-    <div className="space-y-1 text-zinc-300">
-      {parts.map((part, index) => {
-        const match = part.match(/^\`\`\`([a-zA-Z0-9_-]*)\n([\s\S]*?)\`\`\`$/);
-        if (match) {
-          const [, language, code] = match;
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p({ children }) {
+          return <p className="mb-4 last:mb-0 leading-7 text-[15px]">{children}</p>;
+        },
+        h1({ children }) {
+          return <h1 className="text-xl font-semibold mt-6 mb-3 tracking-normal text-zinc-100">{children}</h1>;
+        },
+        h2({ children }) {
+          return <h2 className="text-lg font-semibold mt-6 mb-3 tracking-normal text-zinc-100">{children}</h2>;
+        },
+        h3({ children }) {
+          return <h3 className="text-[16px] font-semibold mt-5 mb-2 tracking-normal text-zinc-100">{children}</h3>;
+        },
+        ul({ children }) {
+          return <ul className="list-disc pl-6 mb-4 space-y-1.5 marker:text-zinc-500">{children}</ul>;
+        },
+        ol({ children }) {
+          return <ol className="list-decimal pl-6 mb-4 space-y-1.5 marker:text-zinc-500">{children}</ol>;
+        },
+        li({ children }) {
+          return <li className="leading-7 text-[15px] pl-1">{children}</li>;
+        },
+        blockquote({ children }) {
           return (
-            <CodeBlock 
-              key={index} 
-              language={language || "code"} 
-              code={code.trim()} 
-            />
+            <blockquote className="border-l-2 border-zinc-700 pl-4 py-1 my-4 text-zinc-400 italic bg-zinc-900/30 rounded-r-lg">
+              {children}
+            </blockquote>
+          );
+        },
+        strong({ children }) {
+          return <strong className="font-semibold text-zinc-200">{children}</strong>;
+        },
+        em({ children }) {
+          return <em className="italic text-zinc-300">{children}</em>;
+        },
+        code(props) {
+          const { children, className, node, ...rest } = props;
+          const match = /language-(\w+)/.exec(className || "");
+          const isInline = !match && !className?.includes("language-");
+          
+          if (isInline) {
+            return (
+              <code
+                className="px-1.5 py-0.5 mx-0.5 rounded-md bg-zinc-800/80 text-zinc-200 font-mono text-[13px] border border-zinc-700/50 break-words"
+                {...rest}
+              >
+                {children}
+              </code>
+            );
+          }
+
+          const language = match ? match[1] : "text";
+          return (
+            <CodeBlock language={language} code={String(children).replace(/\n$/, "")} />
+          );
+        },
+        pre({ children }) {
+          // pre acts as wrapper for block code, we handle the actual styling inside CodeBlock
+          return <div className="not-prose my-5">{children}</div>;
+        },
+        a({ children, href }) {
+          return (
+            <a href={href} className="text-zinc-300 underline underline-offset-4 hover:text-zinc-100 transition-colors" target="_blank" rel="noreferrer">
+              {children}
+            </a>
           );
         }
-
-        return <TextSection key={index} text={part} />;
-      })}
-    </div>
+      }}
+    >
+      {content}
+    </ReactMarkdown>
   );
 }
 
@@ -51,202 +106,31 @@ function CodeBlock({ language, code }: CodeBlockProps) {
   };
 
   return (
-    <div className="my-4 rounded-lg overflow-hidden border border-zinc-800/80 bg-zinc-950/80 font-mono text-sm shadow-md">
-      <div className="flex items-center justify-between px-4 py-1.5 bg-zinc-900/60 border-b border-zinc-800/60 text-[11px] text-zinc-400 select-none">
-        <span className="capitalize font-semibold tracking-wider">{language}</span>
+    <div className="rounded-xl overflow-hidden border border-zinc-800/60 bg-[#0c0c0e] font-mono text-[13px] shadow-sm flex flex-col w-full">
+      <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/50 border-b border-zinc-800/60 text-zinc-400 select-none">
+        <span className="text-xs font-medium lowercase tracking-wide">{language}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-zinc-200 transition-colors py-1 px-1.5 rounded-md hover:bg-zinc-800/60"
+          className="flex items-center gap-1.5 hover:text-zinc-200 transition-colors py-1 px-2 rounded hover:bg-zinc-800/60"
         >
           {copied ? (
             <>
-              <Check className="h-3 w-3 text-emerald-400" />
-              <span className="text-emerald-400">Copied!</span>
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs text-emerald-400 font-medium">Copied</span>
             </>
           ) : (
             <>
-              <Copy className="h-3 w-3" />
-              <span>Copy code</span>
+              <Copy className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">Copy code</span>
             </>
           )}
         </button>
       </div>
       <div className="p-4 overflow-x-auto scrollbar-thin">
-        <pre className="text-zinc-200 leading-relaxed text-xs sm:text-sm whitespace-pre">
-          <code>{code}</code>
+        <pre className="text-zinc-300 leading-relaxed whitespace-pre min-w-full">
+          <code className="bg-transparent p-0 text-[13px] font-mono border-none">{code}</code>
         </pre>
       </div>
     </div>
   );
-}
-
-function parseInlineStyles(text: string) {
-  const tokens: React.ReactNode[] = [];
-  let currentText = text;
-  let keyIdx = 0;
-
-  while (currentText) {
-    const boldIndex = currentText.indexOf("**");
-    const codeIndex = currentText.indexOf("`");
-
-    if (boldIndex === -1 && codeIndex === -1) {
-      tokens.push(<span key={keyIdx++}>{currentText}</span>);
-      break;
-    }
-
-    if (boldIndex !== -1 && (codeIndex === -1 || boldIndex < codeIndex)) {
-      // Bold tag is first
-      if (boldIndex > 0) {
-        tokens.push(<span key={keyIdx++}>{currentText.slice(0, boldIndex)}</span>);
-      }
-      const rest = currentText.slice(boldIndex + 2);
-      const nextBoldIndex = rest.indexOf("**");
-      if (nextBoldIndex !== -1) {
-        const boldText = rest.slice(0, nextBoldIndex);
-        tokens.push(
-          <strong key={keyIdx++} className="font-semibold text-zinc-100">
-            {boldText}
-          </strong>
-        );
-        currentText = rest.slice(nextBoldIndex + 2);
-      } else {
-        tokens.push(<span key={keyIdx++}>**</span>);
-        currentText = rest;
-      }
-    } else {
-      // Inline code backtick is first
-      if (codeIndex > 0) {
-        tokens.push(<span key={keyIdx++}>{currentText.slice(0, codeIndex)}</span>);
-      }
-      const rest = currentText.slice(codeIndex + 1);
-      const nextCodeIndex = rest.indexOf("`");
-      if (nextCodeIndex !== -1) {
-        const codeText = rest.slice(0, nextCodeIndex);
-        tokens.push(
-          <code key={keyIdx++} className="px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800/80 text-zinc-200 font-mono text-xs font-semibold">
-            {codeText}
-          </code>
-        );
-        currentText = rest.slice(nextCodeIndex + 1);
-      } else {
-        tokens.push(<span key={keyIdx++}>`</span>);
-        currentText = rest;
-      }
-    }
-  }
-
-  return tokens;
-}
-
-function TextSection({ text }: { text: string }) {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
-  let keyIdx = 0;
-  
-  let currentListItems: React.ReactNode[] = [];
-  let listType: "ul" | "ol" | null = null;
-
-  const flushList = () => {
-    if (currentListItems.length > 0) {
-      if (listType === "ul") {
-        elements.push(
-          <ul key={keyIdx++} className="list-disc pl-5 my-2.5 space-y-1 text-zinc-300">
-            {currentListItems}
-          </ul>
-        );
-      } else if (listType === "ol") {
-        elements.push(
-          <ol key={keyIdx++} className="list-decimal pl-5 my-2.5 space-y-1 text-zinc-300">
-            {currentListItems}
-          </ol>
-        );
-      }
-      currentListItems = [];
-      listType = null;
-    }
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Check for headings
-    if (line.startsWith("### ")) {
-      flushList();
-      elements.push(
-        <h3 key={keyIdx++} className="text-sm font-bold text-zinc-100 mt-4 mb-1.5">
-          {parseInlineStyles(line.slice(4))}
-        </h3>
-      );
-      continue;
-    }
-    
-    if (line.startsWith("## ")) {
-      flushList();
-      elements.push(
-        <h2 key={keyIdx++} className="text-base font-bold text-zinc-100 mt-5 mb-2 border-b border-zinc-800/40 pb-1">
-          {parseInlineStyles(line.slice(3))}
-        </h2>
-      );
-      continue;
-    }
-
-    if (line.startsWith("# ")) {
-      flushList();
-      elements.push(
-        <h1 key={keyIdx++} className="text-lg font-extrabold text-zinc-100 mt-6 mb-3">
-          {parseInlineStyles(line.slice(2))}
-        </h1>
-      );
-      continue;
-    }
-
-    // Check for bullet list items
-    const isBullet = line.startsWith("- ") || line.startsWith("* ");
-    if (isBullet) {
-      if (listType !== "ul") {
-        flushList();
-        listType = "ul";
-      }
-      currentListItems.push(
-        <li key={keyIdx++} className="leading-relaxed text-zinc-300">
-          {parseInlineStyles(line.slice(2))}
-        </li>
-      );
-      continue;
-    }
-
-    // Check for numbered list items
-    const numMatch = line.match(/^(\d+)\.\s(.*)/);
-    if (numMatch) {
-      if (listType !== "ol") {
-        flushList();
-        listType = "ol";
-      }
-      currentListItems.push(
-        <li key={keyIdx++} className="leading-relaxed text-zinc-300">
-          {parseInlineStyles(numMatch[2])}
-        </li>
-      );
-      continue;
-    }
-
-    // Empty line flushes the active list
-    if (!line.trim()) {
-      flushList();
-      continue;
-    }
-
-    // Normal paragraph line
-    flushList();
-    elements.push(
-      <p key={keyIdx++} className="leading-relaxed mb-3.5 text-zinc-300">
-        {parseInlineStyles(line)}
-      </p>
-    );
-  }
-
-  // Flush any remaining active lists
-  flushList();
-
-  return <>{elements}</>;
 }
