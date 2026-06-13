@@ -7,44 +7,63 @@ import { ChatMessageList } from "./chat-message-list";
 import { ChatComposer } from "./chat-composer";
 import { ChatSession, Message, ModelOption, ChatRequest } from "@/lib/types/chat";
 import { defaultModel } from "@/lib/ai/models";
-import { getStoredSessions, saveSessions } from "@/lib/storage/chat-storage";
+import {
+  getSessions,
+  saveSessions,
+  getActiveSessionId,
+  setActiveSessionId
+} from "@/lib/storage/chat-storage";
 import { v4 as uuidv4 } from "uuid";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { MemoryDialog } from "../memory/memory-dialog";
+import { buildSystemPrompt } from "@/lib/memory/memory-context";
+import { detectAndSaveMemory } from "@/lib/memory/memory-detector";
 
 export function ChatLayout() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelOption>(defaultModel);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // Load state from localStorage on mount
-    const stored = getStoredSessions();
+    const stored = getSessions();
     setSessions(stored);
     
-    if (stored.length > 0) {
+    const activeId = getActiveSessionId();
+    if (activeId && stored.some(s => s.id === activeId)) {
+      setCurrentSessionId(activeId);
+    } else if (stored.length > 0) {
       setCurrentSessionId(stored[0].id);
+      setActiveSessionId(stored[0].id);
     } else {
-      createNewSession();
+      createNewSession(stored);
     }
   }, []);
 
-  const createNewSession = () => {
+  const createNewSession = (currentList = sessions) => {
     const newSession: ChatSession = {
       id: uuidv4(),
       title: "New chat",
       messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       model: selectedModel.model,
       provider: selectedModel.provider,
     };
     
-    const updatedSessions = [newSession, ...sessions];
+    const updatedSessions = [newSession, ...currentList];
     setSessions(updatedSessions);
     setCurrentSessionId(newSession.id);
+    setActiveSessionId(newSession.id);
     saveSessions(updatedSessions);
+  };
+
+  const handleSelectSession = (id: string) => {
+    setCurrentSessionId(id);
+    setActiveSessionId(id);
   };
 
   const handleSendMessage = async (content: string) => {
@@ -56,7 +75,7 @@ export function ChatLayout() {
       id: uuidv4(),
       role: "user",
       content,
-      createdAt: Date.now(),
+      createdAt: new Date().toISOString(),
     };
     
     let currentSession = sessions.find(s => s.id === currentSessionId);
@@ -74,20 +93,43 @@ export function ChatLayout() {
       ...currentSession,
       title: newTitle,
       messages: updatedMessages,
-      updatedAt: Date.now(),
+      updatedAt: new Date().toISOString(),
       model: selectedModel.model,
       provider: selectedModel.provider
     };
     
     // Update state immediately for user message
     updateSession(currentSession);
+
+    // 1. Memory Detection (Manual trigger intercept)
+    const memoryResult = detectAndSaveMemory(content);
+    if (memoryResult.isMemoryAction) {
+      const feedbackMsg: Message = {
+        id: uuidv4(),
+        role: "assistant",
+        content: memoryResult.feedbackMessage || "Saved to memory.",
+        createdAt: new Date().toISOString(),
+        model: selectedModel.model,
+        provider: selectedModel.provider
+      };
+
+      const finalSession = {
+        ...currentSession,
+        messages: [...updatedMessages, feedbackMsg],
+        updatedAt: new Date().toISOString()
+      };
+
+      updateSession(finalSession);
+      setIsGenerating(false);
+      return;
+    }
     
     const aiMsgId = uuidv4();
     const initialAiMsg: Message = {
       id: aiMsgId,
       role: "assistant",
       content: "",
-      createdAt: Date.now(),
+      createdAt: new Date().toISOString(),
       model: selectedModel.model,
       provider: selectedModel.provider
     };
@@ -96,7 +138,7 @@ export function ChatLayout() {
     const generatingSession = {
       ...currentSession,
       messages: [...updatedMessages, initialAiMsg],
-      updatedAt: Date.now()
+      updatedAt: new Date().toISOString()
     };
     updateSession(generatingSession);
 
@@ -104,11 +146,22 @@ export function ChatLayout() {
     abortControllerRef.current = controller;
 
     try {
-      // Build context (last 10 messages)
-      const contextMessages = updatedMessages.slice(-10).map(m => ({
-        role: m.role,
-        content: m.content
-      }));
+      // 2. Build Context (Slice to last 15 messages for token optimization)
+      const sliced = updatedMessages.slice(-15);
+      
+      // Build dynamic system message including active memories
+      const systemMsg = {
+        role: "system" as const,
+        content: buildSystemPrompt()
+      };
+
+      const contextMessages = [
+        systemMsg,
+        ...sliced.map(m => ({
+          role: m.role,
+          content: m.content
+        }))
+      ];
 
       const payload: ChatRequest = {
         provider: selectedModel.provider,
@@ -166,7 +219,7 @@ export function ChatLayout() {
           if (s.id === currentSessionId) {
             return {
               ...s,
-              updatedAt: Date.now()
+              updatedAt: new Date().toISOString()
             };
           }
           return s;
@@ -183,7 +236,7 @@ export function ChatLayout() {
             if (s.id === currentSessionId) {
               return {
                 ...s,
-                updatedAt: Date.now()
+                updatedAt: new Date().toISOString()
               };
             }
             return s;
@@ -204,7 +257,7 @@ export function ChatLayout() {
                   }
                   return m;
                 }),
-                updatedAt: Date.now()
+                updatedAt: new Date().toISOString()
               };
             }
             return s;
@@ -251,7 +304,7 @@ export function ChatLayout() {
       id: aiMsgId,
       role: "assistant",
       content: "",
-      createdAt: Date.now(),
+      createdAt: new Date().toISOString(),
       model: selectedModel.model,
       provider: selectedModel.provider
     };
@@ -260,7 +313,7 @@ export function ChatLayout() {
     const generatingSession = {
       ...currentSession,
       messages: [...trimmedMessages, initialAiMsg],
-      updatedAt: Date.now()
+      updatedAt: new Date().toISOString()
     };
     updateSession(generatingSession);
 
@@ -268,11 +321,21 @@ export function ChatLayout() {
     abortControllerRef.current = controller;
 
     try {
-      // Build context (last 10 messages from the trimmed list)
-      const contextMessages = trimmedMessages.slice(-10).map(m => ({
-        role: m.role,
-        content: m.content
-      }));
+      // Build context (last 15 messages from the trimmed list)
+      const sliced = trimmedMessages.slice(-15);
+      
+      const systemMsg = {
+        role: "system" as const,
+        content: buildSystemPrompt()
+      };
+
+      const contextMessages = [
+        systemMsg,
+        ...sliced.map(m => ({
+          role: m.role,
+          content: m.content
+        }))
+      ];
 
       const payload: ChatRequest = {
         provider: selectedModel.provider,
@@ -330,7 +393,7 @@ export function ChatLayout() {
           if (s.id === currentSessionId) {
             return {
               ...s,
-              updatedAt: Date.now()
+              updatedAt: new Date().toISOString()
             };
           }
           return s;
@@ -346,7 +409,7 @@ export function ChatLayout() {
             if (s.id === currentSessionId) {
               return {
                 ...s,
-                updatedAt: Date.now()
+                updatedAt: new Date().toISOString()
               };
             }
             return s;
@@ -366,7 +429,7 @@ export function ChatLayout() {
                   }
                   return m;
                 }),
-                updatedAt: Date.now()
+                updatedAt: new Date().toISOString()
               };
             }
             return s;
@@ -384,7 +447,7 @@ export function ChatLayout() {
   const handleTogglePin = (id: string) => {
     const updated = sessions.map(s => {
       if (s.id === id) {
-        return { ...s, isPinned: !s.isPinned, updatedAt: Date.now() };
+        return { ...s, isPinned: !s.isPinned, updatedAt: new Date().toISOString() };
       }
       return s;
     });
@@ -396,7 +459,7 @@ export function ChatLayout() {
     if (!newTitle.trim()) return;
     const updated = sessions.map(s => {
       if (s.id === id) {
-        return { ...s, title: newTitle.trim(), updatedAt: Date.now() };
+        return { ...s, title: newTitle.trim(), updatedAt: new Date().toISOString() };
       }
       return s;
     });
@@ -412,21 +475,9 @@ export function ChatLayout() {
     if (currentSessionId === id) {
       if (updated.length > 0) {
         setCurrentSessionId(updated[0].id);
+        setActiveSessionId(updated[0].id);
       } else {
-        // Create new session if list is empty
-        const newSession: ChatSession = {
-          id: uuidv4(),
-          title: "New chat",
-          messages: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          model: selectedModel.model,
-          provider: selectedModel.provider,
-        };
-        const newSessions = [newSession];
-        setSessions(newSessions);
-        setCurrentSessionId(newSession.id);
-        saveSessions(newSessions);
+        createNewSession(updated);
       }
     }
   };
@@ -434,7 +485,6 @@ export function ChatLayout() {
   const updateSession = (updatedSession: ChatSession) => {
     setSessions(prev => {
       const newSessions = prev.map(s => s.id === updatedSession.id ? updatedSession : s);
-      // Move updated to top
       const sorted = [updatedSession, ...newSessions.filter(s => s.id !== updatedSession.id)];
       saveSessions(sorted);
       return sorted;
@@ -449,11 +499,12 @@ export function ChatLayout() {
         <ChatSidebar 
           sessions={sessions}
           currentSessionId={currentSessionId}
-          onSelectSession={setCurrentSessionId}
-          onNewChat={createNewSession}
+          onSelectSession={handleSelectSession}
+          onNewChat={() => createNewSession()}
           onTogglePin={handleTogglePin}
           onRenameSession={handleRenameSession}
           onDeleteSession={handleDeleteSession}
+          onOpenMemory={() => setIsMemoryOpen(true)}
         />
         
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
@@ -476,6 +527,11 @@ export function ChatLayout() {
           />
         </div>
       </div>
+
+      <MemoryDialog 
+        open={isMemoryOpen}
+        onOpenChange={setIsMemoryOpen}
+      />
     </SidebarProvider>
   );
 }

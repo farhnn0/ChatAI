@@ -1,22 +1,25 @@
 export type Role = "system" | "user" | "assistant";
 
-export type Message = {
+export type ChatMessage = {
   id: string;
   role: Role;
   content: string;
   model?: string;
   provider?: string;
-  createdAt: number;
+  createdAt: string;
 };
+
+// Alias to maintain compatibility with existing message list and UI code
+export type Message = ChatMessage;
 
 export type ChatSession = {
   id: string;
   title: string;
-  messages: Message[];
-  createdAt: number;
-  updatedAt: number;
-  model: string;
-  provider: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+  model?: string;
+  provider?: string;
   isPinned?: boolean;
 };
 

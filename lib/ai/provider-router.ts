@@ -6,15 +6,19 @@ import { SYSTEM_PROMPT } from "./system-prompt";
 export const routeChatRequest = async (
   request: ChatRequest
 ): Promise<ChatResponse> => {
-  const systemMessage = {
-    role: "system" as const,
-    content: SYSTEM_PROMPT,
-  };
-
-  const modifiedRequest: ChatRequest = {
-    ...request,
-    messages: [systemMessage, ...request.messages],
-  };
+  const hasSystem = request.messages.some(m => m.role === "system");
+  const modifiedRequest: ChatRequest = hasSystem
+    ? request
+    : {
+        ...request,
+        messages: [
+          {
+            role: "system" as const,
+            content: SYSTEM_PROMPT,
+          },
+          ...request.messages,
+        ],
+      };
 
   if (modifiedRequest.provider === "ollama") {
     return handleOllamaRequest(modifiedRequest);
@@ -28,15 +32,19 @@ export const routeChatRequest = async (
 export const routeChatRequestStream = async (
   request: ChatRequest
 ): Promise<ReadableStream> => {
-  const systemMessage = {
-    role: "system" as const,
-    content: SYSTEM_PROMPT,
-  };
-
-  const modifiedRequest: ChatRequest = {
-    ...request,
-    messages: [systemMessage, ...request.messages],
-  };
+  const hasSystem = request.messages.some(m => m.role === "system");
+  const modifiedRequest: ChatRequest = hasSystem
+    ? request
+    : {
+        ...request,
+        messages: [
+          {
+            role: "system" as const,
+            content: SYSTEM_PROMPT,
+          },
+          ...request.messages,
+        ],
+      };
 
   if (modifiedRequest.provider === "ollama") {
     return handleOllamaStream(modifiedRequest);

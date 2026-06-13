@@ -15,7 +15,7 @@ import {
   SidebarGroupContent,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { PenSquare, MessageSquare, Search, Settings, MoreHorizontal, Pin, Edit2, Trash2 } from "lucide-react";
+import { PenSquare, MessageSquare, Search, Settings, MoreHorizontal, Pin, Edit2, Trash2, Brain } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -32,6 +32,7 @@ interface ChatSidebarProps {
   onTogglePin: (id: string) => void;
   onRenameSession: (id: string, newTitle: string) => void;
   onDeleteSession: (id: string) => void;
+  onOpenMemory: () => void;
 }
 
 export function ChatSidebar({
@@ -42,6 +43,7 @@ export function ChatSidebar({
   onTogglePin,
   onRenameSession,
   onDeleteSession,
+  onOpenMemory,
 }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export function ChatSidebar({
   const sortedSessions = [...filteredSessions].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
-    return b.updatedAt - a.updatedAt;
+    return b.updatedAt.localeCompare(a.updatedAt);
   });
 
   return (
@@ -200,6 +202,16 @@ export function ChatSidebar({
 
       <SidebarFooter className="p-2 mt-auto border-t border-zinc-850/50">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={onOpenMemory}
+              tooltip="Memory"
+              className="w-full justify-start gap-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/30 rounded-lg cursor-pointer"
+            >
+              <Brain className="h-4 w-4 shrink-0" />
+              <span className="group-data-[collapsible=icon]:hidden text-xs">Memory</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip="Settings"
