@@ -194,6 +194,12 @@ export function ChatLayout() {
         const chunk = decoder.decode(value, { stream: true });
         streamedContent += chunk;
         
+        let cleanContent = streamedContent;
+        const metaIndex = streamedContent.indexOf("\n__METADATA__:");
+        if (metaIndex !== -1) {
+          cleanContent = streamedContent.slice(0, metaIndex);
+        }
+
         // Update sessions state directly to reflect stream chunks in real-time
         setSessions(prev => {
           return prev.map(s => {
@@ -202,7 +208,7 @@ export function ChatLayout() {
                 ...s,
                 messages: s.messages.map(m => {
                   if (m.id === aiMsgId) {
-                    return { ...m, content: streamedContent };
+                    return { ...m, content: cleanContent };
                   }
                   return m;
                 })
@@ -213,12 +219,49 @@ export function ChatLayout() {
         });
       }
 
+      let cleanContent = streamedContent;
+      let usage: any = undefined;
+      const metaIndex = streamedContent.indexOf("\n__METADATA__:");
+      if (metaIndex !== -1) {
+        cleanContent = streamedContent.slice(0, metaIndex);
+        const metadataStr = streamedContent.slice(metaIndex + 14);
+        try {
+          const parsedMeta = JSON.parse(metadataStr);
+          const promptTokens = parsedMeta.prompt_tokens || 0;
+          const completionTokens = parsedMeta.completion_tokens || 0;
+          let cost = 0;
+          
+          if (selectedModel.provider === "deepseek") {
+            if (selectedModel.model === "deepseek-v4-flash") {
+              cost = (promptTokens * 0.00000014) + (completionTokens * 0.00000028);
+            } else if (selectedModel.model === "deepseek-v4-pro") {
+              cost = (promptTokens * 0.000001) + (completionTokens * 0.000002);
+            }
+          }
+          
+          usage = {
+            promptTokens,
+            completionTokens,
+            totalTokens: parsedMeta.total_tokens || (promptTokens + completionTokens),
+            cost
+          };
+        } catch (e) {
+          console.error("Failed to parse metadata in chat-layout:", e);
+        }
+      }
+
       // Save the final state to localStorage once streaming is complete
       setSessions(prev => {
         const finalSessions = prev.map(s => {
           if (s.id === currentSessionId) {
             return {
               ...s,
+              messages: s.messages.map(m => {
+                if (m.id === aiMsgId) {
+                  return { ...m, content: cleanContent, usage };
+                }
+                return m;
+              }),
               updatedAt: new Date().toISOString()
             };
           }
@@ -229,7 +272,7 @@ export function ChatLayout() {
       });
 
       // Fire-and-forget: auto-extract memories from the conversation
-      const lastMessages = [...updatedMessages.slice(-6), { role: "assistant" as const, content: streamedContent }];
+      const lastMessages = [...updatedMessages.slice(-6), { role: "assistant" as const, content: cleanContent }];
       autoExtractMemories(
         selectedModel.provider,
         selectedModel.model,
@@ -376,6 +419,12 @@ export function ChatLayout() {
         const chunk = decoder.decode(value, { stream: true });
         streamedContent += chunk;
         
+        let cleanContent = streamedContent;
+        const metaIndex = streamedContent.indexOf("\n__METADATA__:");
+        if (metaIndex !== -1) {
+          cleanContent = streamedContent.slice(0, metaIndex);
+        }
+
         // Update sessions state directly to reflect stream chunks in real-time
         setSessions(prev => {
           return prev.map(s => {
@@ -384,7 +433,7 @@ export function ChatLayout() {
                 ...s,
                 messages: s.messages.map(m => {
                   if (m.id === aiMsgId) {
-                    return { ...m, content: streamedContent };
+                    return { ...m, content: cleanContent };
                   }
                   return m;
                 })
@@ -395,12 +444,49 @@ export function ChatLayout() {
         });
       }
 
+      let cleanContent = streamedContent;
+      let usage: any = undefined;
+      const metaIndex = streamedContent.indexOf("\n__METADATA__:");
+      if (metaIndex !== -1) {
+        cleanContent = streamedContent.slice(0, metaIndex);
+        const metadataStr = streamedContent.slice(metaIndex + 14);
+        try {
+          const parsedMeta = JSON.parse(metadataStr);
+          const promptTokens = parsedMeta.prompt_tokens || 0;
+          const completionTokens = parsedMeta.completion_tokens || 0;
+          let cost = 0;
+          
+          if (selectedModel.provider === "deepseek") {
+            if (selectedModel.model === "deepseek-v4-flash") {
+              cost = (promptTokens * 0.00000014) + (completionTokens * 0.00000028);
+            } else if (selectedModel.model === "deepseek-v4-pro") {
+              cost = (promptTokens * 0.000001) + (completionTokens * 0.000002);
+            }
+          }
+          
+          usage = {
+            promptTokens,
+            completionTokens,
+            totalTokens: parsedMeta.total_tokens || (promptTokens + completionTokens),
+            cost
+          };
+        } catch (e) {
+          console.error("Failed to parse metadata in chat-layout:", e);
+        }
+      }
+
       // Save the final state to localStorage once streaming is complete
       setSessions(prev => {
         const finalSessions = prev.map(s => {
           if (s.id === currentSessionId) {
             return {
               ...s,
+              messages: s.messages.map(m => {
+                if (m.id === aiMsgId) {
+                  return { ...m, content: cleanContent, usage };
+                }
+                return m;
+              }),
               updatedAt: new Date().toISOString()
             };
           }
@@ -411,7 +497,7 @@ export function ChatLayout() {
       });
 
       // Fire-and-forget: auto-extract memories from the regenerated conversation
-      const lastMessages = [...trimmedMessages.slice(-6), { role: "assistant" as const, content: streamedContent }];
+      const lastMessages = [...trimmedMessages.slice(-6), { role: "assistant" as const, content: cleanContent }];
       autoExtractMemories(
         selectedModel.provider,
         selectedModel.model,

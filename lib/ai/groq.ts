@@ -1,37 +1,25 @@
 import { ChatRequest, ChatResponse } from "@/lib/types/chat";
 
-export const handleDeepSeekRequest = async (
+export const handleGroqRequest = async (
   request: ChatRequest
 ): Promise<ChatResponse> => {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("DeepSeek API key is not configured.");
+    throw new Error("Groq API key is not configured.");
   }
 
-  // Map custom UI model IDs to actual DeepSeek API model endpoints
-  let actualModel = request.model;
-  if (actualModel === "deepseek-v4-flash") {
-    actualModel = "deepseek-chat";
-  } else if (actualModel === "deepseek-v4-pro") {
-    actualModel = "deepseek-reasoner";
-  }
-
-  // Use OpenAI compatible endpoint for DeepSeek
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: actualModel,
+      model: request.model,
       messages: request.messages,
       stream: false,
       temperature: 0.7,
       max_tokens: 4096,
-      top_p: 0.9,
-      frequency_penalty: 0.3,
-      presence_penalty: 0.2,
     }),
   });
 
@@ -45,51 +33,38 @@ export const handleDeepSeekRequest = async (
         errorDetails = await response.text();
       } catch {}
     }
-    throw new Error(`DeepSeek API Error (Status ${response.status}): ${errorDetails}`);
+    throw new Error(`Groq API Error (Status ${response.status}): ${errorDetails}`);
   }
 
   const data = await response.json();
 
   return {
     content: data.choices[0]?.message?.content || "",
-    provider: "deepseek",
+    provider: "groq",
     model: request.model,
   };
 };
 
-export const handleDeepSeekStream = async (
+export const handleGroqStream = async (
   request: ChatRequest
 ): Promise<ReadableStream> => {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("DeepSeek API key is not configured.");
+    throw new Error("Groq API key is not configured. Please add GROQ_API_KEY to your .env.local file.");
   }
 
-  let actualModel = request.model;
-  if (actualModel === "deepseek-v4-flash") {
-    actualModel = "deepseek-chat";
-  } else if (actualModel === "deepseek-v4-pro") {
-    actualModel = "deepseek-reasoner";
-  }
-
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: actualModel,
+      model: request.model,
       messages: request.messages,
       stream: true,
-      stream_options: {
-        include_usage: true
-      },
       temperature: 0.7,
       max_tokens: 4096,
-      top_p: 0.9,
-      frequency_penalty: 0.3,
-      presence_penalty: 0.2,
     }),
   });
 
@@ -103,7 +78,7 @@ export const handleDeepSeekStream = async (
         errorDetails = await response.text();
       } catch {}
     }
-    throw new Error(`DeepSeek API Error (Status ${response.status}): ${errorDetails}`);
+    throw new Error(`Groq API Error (Status ${response.status}): ${errorDetails}`);
   }
 
   const encoder = new TextEncoder();
@@ -118,7 +93,6 @@ export const handleDeepSeekStream = async (
 
       const reader = response.body.getReader();
       let buffer = "";
-      let finalUsage: any = null;
 
       try {
         while (true) {
@@ -128,7 +102,6 @@ export const handleDeepSeekStream = async (
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           
-          // Save the last partial line back to buffer
           buffer = lines.pop() || "";
 
           for (const line of lines) {
@@ -146,18 +119,11 @@ export const handleDeepSeekStream = async (
                 if (chunkText) {
                   controller.enqueue(encoder.encode(chunkText));
                 }
-                if (json.usage) {
-                  finalUsage = json.usage;
-                }
               } catch (e) {
-                console.error("Failed to parse DeepSeek SSE JSON chunk:", dataStr, e);
+                console.error("Failed to parse Groq SSE JSON chunk:", dataStr, e);
               }
             }
           }
-        }
-
-        if (finalUsage) {
-          controller.enqueue(encoder.encode(`\n__METADATA__:${JSON.stringify(finalUsage)}`));
         }
       } catch (err) {
         controller.error(err);

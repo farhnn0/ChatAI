@@ -73,20 +73,13 @@ export function ChatMessageList({ messages, isGenerating, onRegenerate }: ChatMe
         
         {showThinking && (
           <div className="w-full py-4 flex justify-start">
-            <div className="flex w-full max-w-[90%] md:max-w-3xl lg:max-w-4xl items-start gap-4">
-              <div className="shrink-0 pt-1 hidden sm:flex opacity-60">
-                <div className="h-8 w-8 rounded-full bg-[#131316] border border-zinc-800/80 flex items-center justify-center text-zinc-300 shadow-sm">
-                  <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
-                </div>
+            <div className="flex flex-col max-w-[90%] md:max-w-3xl lg:max-w-4xl w-full items-start">
+              <div className="flex items-center gap-2 mb-1.5 ml-1 select-none opacity-60">
+                <span className="text-xs font-semibold text-zinc-300">AI Assistant</span>
               </div>
-              <div className="flex flex-col min-w-0 w-full items-start">
-                <div className="flex items-center gap-2 mb-1.5 ml-1 select-none opacity-60">
-                  <span className="text-xs font-medium text-zinc-400">AI Assistant</span>
-                </div>
-                <div className="rounded-[20px] rounded-tl-sm bg-[#131316] border border-zinc-800/60 px-5 py-4 text-sm flex items-center gap-2.5 text-zinc-400 shadow-sm">
-                  <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
-                  <span className="animate-pulse">Thinking...</span>
-                </div>
+              <div className="pt-1 text-sm flex items-center gap-2.5 text-zinc-400 font-medium">
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+                <span className="animate-pulse">Thinking...</span>
               </div>
             </div>
           </div>

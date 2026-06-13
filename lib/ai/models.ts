@@ -3,17 +3,17 @@ import { ModelOption } from "@/lib/types/chat";
 export const modelOptions: ModelOption[] = [
   {
     provider: "ollama",
-    model: "qwen2.5-coder:7b",
-    label: "Local Qwen Coder",
-    badge: "Free",
-    description: "Local model for daily coding and experiments.",
-  },
-  {
-    provider: "ollama",
     model: "llama3.1:8b",
     label: "Local Llama 3.1",
-    badge: "Free",
+    badge: "Free Local",
     description: "General purpose local model for conversation and general tasks.",
+  },
+  {
+    provider: "groq",
+    model: "llama-3.3-70b-versatile",
+    label: "Groq Llama 3.3 70B",
+    badge: "Free Cloud",
+    description: "Flagship high-speed cloud model for complex coding and logic.",
   },
   {
     provider: "deepseek",

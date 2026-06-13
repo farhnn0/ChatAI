@@ -1,6 +1,7 @@
 import { ChatRequest, ChatResponse } from "@/lib/types/chat";
 import { handleOllamaRequest, handleOllamaStream } from "./ollama";
 import { handleDeepSeekRequest, handleDeepSeekStream } from "./deepseek";
+import { handleGroqRequest, handleGroqStream } from "./groq";
 import { SYSTEM_PROMPT } from "./system-prompt";
 
 export const routeChatRequest = async (
@@ -24,6 +25,8 @@ export const routeChatRequest = async (
     return handleOllamaRequest(modifiedRequest);
   } else if (modifiedRequest.provider === "deepseek") {
     return handleDeepSeekRequest(modifiedRequest);
+  } else if (modifiedRequest.provider === "groq") {
+    return handleGroqRequest(modifiedRequest);
   } else {
     throw new Error(`Unsupported provider: ${modifiedRequest.provider}`);
   }
@@ -50,6 +53,8 @@ export const routeChatRequestStream = async (
     return handleOllamaStream(modifiedRequest);
   } else if (modifiedRequest.provider === "deepseek") {
     return handleDeepSeekStream(modifiedRequest);
+  } else if (modifiedRequest.provider === "groq") {
+    return handleGroqStream(modifiedRequest);
   } else {
     throw new Error(`Unsupported provider: ${modifiedRequest.provider}`);
   }

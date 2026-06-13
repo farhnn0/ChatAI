@@ -7,6 +7,12 @@ export type ChatMessage = {
   model?: string;
   provider?: string;
   createdAt: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cost?: number;
+  };
 };
 
 // Alias to maintain compatibility with existing message list and UI code
@@ -24,7 +30,7 @@ export type ChatSession = {
 };
 
 export type ModelOption = {
-  provider: "ollama" | "deepseek";
+  provider: "ollama" | "deepseek" | "groq";
   model: string;
   label: string;
   badge: string;
@@ -32,7 +38,7 @@ export type ModelOption = {
 };
 
 export type ChatRequest = {
-  provider: "ollama" | "deepseek";
+  provider: "ollama" | "deepseek" | "groq";
   model: string;
   messages: {
     role: Role;
@@ -42,11 +48,11 @@ export type ChatRequest = {
 
 export type ChatResponse = {
   content: string;
-  provider: "ollama" | "deepseek";
+  provider: "ollama" | "deepseek" | "groq";
   model: string;
 };
 
 export type ChatErrorResponse = {
   error: string;
-  provider?: "ollama" | "deepseek";
+  provider?: "ollama" | "deepseek" | "groq";
 };

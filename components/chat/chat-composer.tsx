@@ -59,7 +59,7 @@ export function ChatComposer({
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             placeholder="Message your AI..."
-            className="min-h-[56px] w-full resize-none bg-transparent border-0 focus-visible:ring-0 text-zinc-100 text-sm pt-4 pb-12 px-4 shadow-none"
+            className="min-h-[56px] w-full resize-none bg-transparent border-0 focus-visible:ring-0 text-zinc-100 font-medium text-sm pt-4 pb-12 px-4 shadow-none"
             rows={1}
           />
           

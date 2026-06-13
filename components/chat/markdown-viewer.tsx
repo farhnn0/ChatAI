@@ -56,7 +56,7 @@ export function MarkdownViewer({ content }: MarkdownViewerProps) {
           if (isInline) {
             return (
               <code
-                className="px-1.5 py-0.5 mx-0.5 rounded-md bg-zinc-800/80 text-zinc-200 font-mono text-[13px] border border-zinc-700/50 break-words"
+                className="px-1.5 py-0.5 mx-0.5 rounded-md bg-zinc-800/60 text-white font-mono text-[14.5px] border border-zinc-700/40 break-words"
                 {...rest}
               >
                 {children}
@@ -106,12 +106,12 @@ function CodeBlock({ language, code }: CodeBlockProps) {
   };
 
   return (
-    <div className="rounded-xl overflow-hidden border border-zinc-800/60 bg-[#0c0c0e] font-mono text-[13px] shadow-sm flex flex-col w-full">
-      <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/50 border-b border-zinc-800/60 text-zinc-400 select-none">
+    <div className="rounded-xl overflow-hidden border border-zinc-700/50 bg-zinc-800/30 font-mono text-[14.5px] shadow-sm flex flex-col w-full">
+      <div className="flex items-center justify-between px-4 py-2 bg-zinc-800/70 border-b border-zinc-700/50 text-zinc-300 select-none">
         <span className="text-xs font-medium lowercase tracking-wide">{language}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 hover:text-zinc-200 transition-colors py-1 px-2 rounded hover:bg-zinc-800/60"
+          className="flex items-center gap-1.5 hover:text-zinc-200 transition-colors py-1 px-2 rounded hover:bg-zinc-700/60"
         >
           {copied ? (
             <>
@@ -127,8 +127,8 @@ function CodeBlock({ language, code }: CodeBlockProps) {
         </button>
       </div>
       <div className="p-4 overflow-x-auto scrollbar-thin">
-        <pre className="text-zinc-300 leading-relaxed whitespace-pre min-w-full">
-          <code className="bg-transparent p-0 text-[13px] font-mono border-none">{code}</code>
+        <pre className="text-zinc-100 leading-relaxed whitespace-pre min-w-full">
+          <code className="bg-transparent p-0 text-[14.5px] font-mono border-none text-zinc-100">{code}</code>
         </pre>
       </div>
     </div>
