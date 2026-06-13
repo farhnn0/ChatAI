@@ -2,7 +2,7 @@ import { addMemory } from "@/lib/storage/chat-storage";
 import { UserMemory } from "@/lib/types/memory";
 
 const DETECTOR_REGEXES = [
-  /^(?:ingat\s+bahwa|remember\s+that|simpan\s+bahwa)\s+(.+)/i,
+  /^(?:ingat\s+(?:bahwa\s+)?|remember\s+(?:that\s+)?|simpan\s+(?:bahwa\s+)?)(.+)/i,
   /^(?:ingat|remember|simpan)\s*:\s*(.+)/i
 ];
 
