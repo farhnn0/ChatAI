@@ -28,10 +28,12 @@ export const handleGroqRequest = async (
     try {
       const errJson = await response.json();
       errorDetails = errJson.error?.message || JSON.stringify(errJson);
-    } catch {
+    } catch (e) {
       try {
         errorDetails = await response.text();
-      } catch {}
+      } catch (e) {
+        console.error("Failed to parse Groq error response:", e);
+      }
     }
     throw new Error(`Groq API Error (Status ${response.status}): ${errorDetails}`);
   }
@@ -73,10 +75,12 @@ export const handleGroqStream = async (
     try {
       const errJson = await response.json();
       errorDetails = errJson.error?.message || JSON.stringify(errJson);
-    } catch {
+    } catch (e) {
       try {
         errorDetails = await response.text();
-      } catch {}
+      } catch (e) {
+        console.error("Failed to parse Groq error response:", e);
+      }
     }
     throw new Error(`Groq API Error (Status ${response.status}): ${errorDetails}`);
   }
