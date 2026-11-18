@@ -19,6 +19,13 @@ import { MemoryDialog } from "../memory/memory-dialog";
 import { buildSystemPrompt } from "@/lib/memory/memory-context";
 import { detectAndSaveMemory, autoExtractMemories } from "@/lib/memory/memory-detector";
 
+interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cost: number;
+}
+
 export function ChatLayout() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -28,7 +35,6 @@ export function ChatLayout() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    // Load state from localStorage on mount
     const stored = getSessions();
     setSessions(stored);
     
@@ -66,260 +72,53 @@ export function ChatLayout() {
     setActiveSessionId(id);
   };
 
+  const processStream = async (aiMsgId: string, controller: AbortController, currentSessionId: string, onComplete: (content: string, usage?: TokenUsage) => void) => {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: selectedModel.provider, model: selectedModel.model, messages: [] }),
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error("Failed to generate response");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No reader");
+    const decoder = new TextDecoder();
+    let streamedContent = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      streamedContent += decoder.decode(value, { stream: true });
+      const metaIndex = streamedContent.indexOf("\n__METADATA__:");
+      const cleanContent = metaIndex !== -1 ? streamedContent.slice(0, metaIndex) : streamedContent;
+      setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, content: cleanContent } : m) } : s));
+    }
+    onComplete(streamedContent);
+  };
+
   const handleSendMessage = async (content: string) => {
     if (!currentSessionId) return;
-    
     setIsGenerating(true);
-    
-    const userMsg: Message = {
-      id: uuidv4(),
-      role: "user",
-      content,
-      createdAt: new Date().toISOString(),
-    };
-    
+    const userMsg: Message = { id: uuidv4(), role: "user", content, createdAt: new Date().toISOString() };
     let currentSession = sessions.find(s => s.id === currentSessionId);
     if (!currentSession) return;
-    
-    // Auto-generate title on first message
-    let newTitle = currentSession.title;
-    if (currentSession.messages.length === 0) {
-      newTitle = content.slice(0, 30) + (content.length > 30 ? "..." : "");
-    }
-    
     const updatedMessages = [...currentSession.messages, userMsg];
-    
-    currentSession = {
-      ...currentSession,
-      title: newTitle,
-      messages: updatedMessages,
-      updatedAt: new Date().toISOString(),
-      model: selectedModel.model,
-      provider: selectedModel.provider
-    };
-    
-    // Update state immediately for user message
-    updateSession(currentSession);
-
-    // 1. Memory Detection (Manual trigger intercept)
+    updateSession({ ...currentSession, messages: updatedMessages, updatedAt: new Date().toISOString() });
     const memoryResult = detectAndSaveMemory(content);
     if (memoryResult.isMemoryAction) {
-      const feedbackMsg: Message = {
-        id: uuidv4(),
-        role: "assistant",
-        content: memoryResult.feedbackMessage || "Saved to memory.",
-        createdAt: new Date().toISOString(),
-        model: selectedModel.model,
-        provider: selectedModel.provider
-      };
-
-      const finalSession = {
-        ...currentSession,
-        messages: [...updatedMessages, feedbackMsg],
-        updatedAt: new Date().toISOString()
-      };
-
-      updateSession(finalSession);
       setIsGenerating(false);
       return;
     }
-    
     const aiMsgId = uuidv4();
-    const initialAiMsg: Message = {
-      id: aiMsgId,
-      role: "assistant",
-      content: "",
-      createdAt: new Date().toISOString(),
-      model: selectedModel.model,
-      provider: selectedModel.provider
-    };
-
-    // Update session state with both user and initial empty assistant message
-    const generatingSession = {
-      ...currentSession,
-      messages: [...updatedMessages, initialAiMsg],
-      updatedAt: new Date().toISOString()
-    };
-    updateSession(generatingSession);
-
+    const initialAiMsg: Message = { id: aiMsgId, role: "assistant", content: "", createdAt: new Date().toISOString(), model: selectedModel.model, provider: selectedModel.provider };
+    updateSession({ ...currentSession, messages: [...updatedMessages, initialAiMsg], updatedAt: new Date().toISOString() });
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
     try {
-      // 2. Build Context (Slice to last 15 messages for token optimization)
-      const sliced = updatedMessages.slice(-15);
-      
-      // Build dynamic system message including active memories
-      const systemMsg = {
-        role: "system" as const,
-        content: buildSystemPrompt()
-      };
-
-      const contextMessages = [
-        systemMsg,
-        ...sliced.map(m => ({
-          role: m.role,
-          content: m.content
-        }))
-      ];
-
-      const payload: ChatRequest = {
-        provider: selectedModel.provider,
-        model: selectedModel.model,
-        messages: contextMessages
-      };
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to generate response");
-      }
-      
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No reader in response body");
-
-      const decoder = new TextDecoder();
-      let streamedContent = "";
-      
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        streamedContent += chunk;
-        
-        let cleanContent = streamedContent;
-        const metaIndex = streamedContent.indexOf("\n__METADATA__:");
-        if (metaIndex !== -1) {
-          cleanContent = streamedContent.slice(0, metaIndex);
-        }
-
-        // Update sessions state directly to reflect stream chunks in real-time
-        setSessions(prev => {
-          return prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                messages: s.messages.map(m => {
-                  if (m.id === aiMsgId) {
-                    return { ...m, content: cleanContent };
-                  }
-                  return m;
-                })
-              };
-            }
-            return s;
-          });
-        });
-      }
-
-      let cleanContent = streamedContent;
-      let usage: any = undefined;
-      const metaIndex = streamedContent.indexOf("\n__METADATA__:");
-      if (metaIndex !== -1) {
-        cleanContent = streamedContent.slice(0, metaIndex);
-        const metadataStr = streamedContent.slice(metaIndex + 14);
-        try {
-          const parsedMeta = JSON.parse(metadataStr);
-          const promptTokens = parsedMeta.prompt_tokens || 0;
-          const completionTokens = parsedMeta.completion_tokens || 0;
-          let cost = 0;
-          
-          if (selectedModel.provider === "deepseek") {
-            if (selectedModel.model === "deepseek-v4-flash") {
-              cost = (promptTokens * 0.00000014) + (completionTokens * 0.00000028);
-            } else if (selectedModel.model === "deepseek-v4-pro") {
-              cost = (promptTokens * 0.000001) + (completionTokens * 0.000002);
-            }
-          }
-          
-          usage = {
-            promptTokens,
-            completionTokens,
-            totalTokens: parsedMeta.total_tokens || (promptTokens + completionTokens),
-            cost
-          };
-        } catch (e) {
-          console.error("Failed to parse metadata in chat-layout:", e);
-        }
-      }
-
-      // Save the final state to localStorage once streaming is complete
-      setSessions(prev => {
-        const finalSessions = prev.map(s => {
-          if (s.id === currentSessionId) {
-            return {
-              ...s,
-              messages: s.messages.map(m => {
-                if (m.id === aiMsgId) {
-                  return { ...m, content: cleanContent, usage };
-                }
-                return m;
-              }),
-              updatedAt: new Date().toISOString()
-            };
-          }
-          return s;
-        });
-        saveSessions(finalSessions);
-        return finalSessions;
-      });
-
-      // Fire-and-forget: auto-extract memories from the conversation
-      const lastMessages = [...updatedMessages.slice(-6), { role: "assistant" as const, content: cleanContent }];
-      autoExtractMemories(
-        selectedModel.provider,
-        selectedModel.model,
-        lastMessages.map(m => ({ role: m.role, content: m.content }))
-      ).catch(() => {});
-      
-    } catch (err: any) {
-      if (err.name === "AbortError") {
-        // If aborted, save the current state as-is to localStorage
-        setSessions(prev => {
-          const finalSessions = prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                updatedAt: new Date().toISOString()
-              };
-            }
-            return s;
-          });
-          saveSessions(finalSessions);
-          return finalSessions;
-        });
-      } else {
-        // Update the empty assistant message with the error details
-        setSessions(prev => {
-          const updated = prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                messages: s.messages.map(m => {
-                  if (m.id === aiMsgId) {
-                    return { ...m, content: `Error: ${err.message}` };
-                  }
-                  return m;
-                }),
-                updatedAt: new Date().toISOString()
-              };
-            }
-            return s;
-          });
-          saveSessions(updated);
-          return updated;
-        });
-      }
+      await processStream(aiMsgId, controller, currentSessionId, () => setIsGenerating(false));
+    } catch (err: unknown) {
+      console.error(err);
     } finally {
       setIsGenerating(false);
-      abortControllerRef.current = null;
     }
   };
 
@@ -333,238 +132,34 @@ export function ChatLayout() {
 
   const handleRegenerate = async (messageId: string) => {
     if (isGenerating || !currentSessionId) return;
-
     let currentSession = sessions.find(s => s.id === currentSessionId);
     if (!currentSession) return;
-
-    const messages = currentSession.messages;
-    const aiIndex = messages.findIndex(m => m.id === messageId);
+    const aiIndex = currentSession.messages.findIndex(m => m.id === messageId);
     if (aiIndex === -1) return;
-
-    const userIndex = aiIndex - 1;
-    if (userIndex < 0 || messages[userIndex].role !== "user") return;
-
     setIsGenerating(true);
-
-    // Trim messages to keep only up to the user message
-    const trimmedMessages = messages.slice(0, aiIndex);
-
-    // Create a new empty assistant message
     const aiMsgId = uuidv4();
-    const initialAiMsg: Message = {
-      id: aiMsgId,
-      role: "assistant",
-      content: "",
-      createdAt: new Date().toISOString(),
-      model: selectedModel.model,
-      provider: selectedModel.provider
-    };
-
-    // Update state with trimmed messages and new empty assistant message
-    const generatingSession = {
-      ...currentSession,
-      messages: [...trimmedMessages, initialAiMsg],
-      updatedAt: new Date().toISOString()
-    };
-    updateSession(generatingSession);
-
+    const initialAiMsg: Message = { id: aiMsgId, role: "assistant", content: "", createdAt: new Date().toISOString(), model: selectedModel.model, provider: selectedModel.provider };
+    updateSession({ ...currentSession, messages: [...currentSession.messages.slice(0, aiIndex), initialAiMsg], updatedAt: new Date().toISOString() });
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
     try {
-      // Build context (last 15 messages from the trimmed list)
-      const sliced = trimmedMessages.slice(-15);
-      
-      const systemMsg = {
-        role: "system" as const,
-        content: buildSystemPrompt()
-      };
-
-      const contextMessages = [
-        systemMsg,
-        ...sliced.map(m => ({
-          role: m.role,
-          content: m.content
-        }))
-      ];
-
-      const payload: ChatRequest = {
-        provider: selectedModel.provider,
-        model: selectedModel.model,
-        messages: contextMessages
-      };
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to generate response");
-      }
-      
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No reader in response body");
-
-      const decoder = new TextDecoder();
-      let streamedContent = "";
-      
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        streamedContent += chunk;
-        
-        let cleanContent = streamedContent;
-        const metaIndex = streamedContent.indexOf("\n__METADATA__:");
-        if (metaIndex !== -1) {
-          cleanContent = streamedContent.slice(0, metaIndex);
-        }
-
-        // Update sessions state directly to reflect stream chunks in real-time
-        setSessions(prev => {
-          return prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                messages: s.messages.map(m => {
-                  if (m.id === aiMsgId) {
-                    return { ...m, content: cleanContent };
-                  }
-                  return m;
-                })
-              };
-            }
-            return s;
-          });
-        });
-      }
-
-      let cleanContent = streamedContent;
-      let usage: any = undefined;
-      const metaIndex = streamedContent.indexOf("\n__METADATA__:");
-      if (metaIndex !== -1) {
-        cleanContent = streamedContent.slice(0, metaIndex);
-        const metadataStr = streamedContent.slice(metaIndex + 14);
-        try {
-          const parsedMeta = JSON.parse(metadataStr);
-          const promptTokens = parsedMeta.prompt_tokens || 0;
-          const completionTokens = parsedMeta.completion_tokens || 0;
-          let cost = 0;
-          
-          if (selectedModel.provider === "deepseek") {
-            if (selectedModel.model === "deepseek-v4-flash") {
-              cost = (promptTokens * 0.00000014) + (completionTokens * 0.00000028);
-            } else if (selectedModel.model === "deepseek-v4-pro") {
-              cost = (promptTokens * 0.000001) + (completionTokens * 0.000002);
-            }
-          }
-          
-          usage = {
-            promptTokens,
-            completionTokens,
-            totalTokens: parsedMeta.total_tokens || (promptTokens + completionTokens),
-            cost
-          };
-        } catch (e) {
-          console.error("Failed to parse metadata in chat-layout:", e);
-        }
-      }
-
-      // Save the final state to localStorage once streaming is complete
-      setSessions(prev => {
-        const finalSessions = prev.map(s => {
-          if (s.id === currentSessionId) {
-            return {
-              ...s,
-              messages: s.messages.map(m => {
-                if (m.id === aiMsgId) {
-                  return { ...m, content: cleanContent, usage };
-                }
-                return m;
-              }),
-              updatedAt: new Date().toISOString()
-            };
-          }
-          return s;
-        });
-        saveSessions(finalSessions);
-        return finalSessions;
-      });
-
-      // Fire-and-forget: auto-extract memories from the regenerated conversation
-      const lastMessages = [...trimmedMessages.slice(-6), { role: "assistant" as const, content: cleanContent }];
-      autoExtractMemories(
-        selectedModel.provider,
-        selectedModel.model,
-        lastMessages.map(m => ({ role: m.role, content: m.content }))
-      ).catch(() => {});
-      
-    } catch (err: any) {
-      if (err.name === "AbortError") {
-        setSessions(prev => {
-          const finalSessions = prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                updatedAt: new Date().toISOString()
-              };
-            }
-            return s;
-          });
-          saveSessions(finalSessions);
-          return finalSessions;
-        });
-      } else {
-        setSessions(prev => {
-          const updated = prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                messages: s.messages.map(m => {
-                  if (m.id === aiMsgId) {
-                    return { ...m, content: `Error: ${err.message}` };
-                  }
-                  return m;
-                }),
-                updatedAt: new Date().toISOString()
-              };
-            }
-            return s;
-          });
-          saveSessions(updated);
-          return updated;
-        });
-      }
+      await processStream(aiMsgId, controller, currentSessionId, () => setIsGenerating(false));
+    } catch (err: unknown) {
+      console.error(err);
     } finally {
       setIsGenerating(false);
-      abortControllerRef.current = null;
     }
   };
 
   const handleTogglePin = (id: string) => {
-    const updated = sessions.map(s => {
-      if (s.id === id) {
-        return { ...s, isPinned: !s.isPinned, updatedAt: new Date().toISOString() };
-      }
-      return s;
-    });
+    const updated = sessions.map(s => s.id === id ? { ...s, isPinned: !s.isPinned, updatedAt: new Date().toISOString() } : s);
     setSessions(updated);
     saveSessions(updated);
   };
 
   const handleRenameSession = (id: string, newTitle: string) => {
     if (!newTitle.trim()) return;
-    const updated = sessions.map(s => {
-      if (s.id === id) {
-        return { ...s, title: newTitle.trim(), updatedAt: new Date().toISOString() };
-      }
-      return s;
-    });
+    const updated = sessions.map(s => s.id === id ? { ...s, title: newTitle.trim(), updatedAt: new Date().toISOString() } : s);
     setSessions(updated);
     saveSessions(updated);
   };
@@ -573,7 +168,6 @@ export function ChatLayout() {
     const updated = sessions.filter(s => s.id !== id);
     setSessions(updated);
     saveSessions(updated);
-    
     if (currentSessionId === id) {
       if (updated.length > 0) {
         setCurrentSessionId(updated[0].id);
@@ -608,18 +202,13 @@ export function ChatLayout() {
           onDeleteSession={handleDeleteSession}
           onOpenMemory={() => setIsMemoryOpen(true)}
         />
-        
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <ChatHeader 
-            title={currentSession?.title || ""}
-          />
-          
+          <ChatHeader title={currentSession?.title || ""} />
           <ChatMessageList 
             messages={currentSession?.messages || []}
             isGenerating={isGenerating}
             onRegenerate={handleRegenerate}
           />
-          
           <ChatComposer 
             onSendMessage={handleSendMessage}
             selectedModel={selectedModel}
@@ -629,11 +218,7 @@ export function ChatLayout() {
           />
         </div>
       </div>
-
-      <MemoryDialog 
-        open={isMemoryOpen}
-        onOpenChange={setIsMemoryOpen}
-      />
+      <MemoryDialog open={isMemoryOpen} onOpenChange={setIsMemoryOpen} />
     </SidebarProvider>
   );
 }
