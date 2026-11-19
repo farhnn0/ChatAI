@@ -1,5 +1,26 @@
 import { ChatRequest, ChatResponse } from "@/lib/types/chat";
 
+const getActualModel = (model: string) => {
+  if (model === "deepseek-v4-flash") return "deepseek-chat";
+  if (model === "deepseek-v4-pro") return "deepseek-reasoner";
+  return model;
+};
+
+const handleApiError = async (response: Response) => {
+  let errorDetails = "Unknown error";
+  try {
+    const errJson = await response.json();
+    errorDetails = errJson.error?.message || JSON.stringify(errJson);
+  } catch {
+    try {
+      errorDetails = await response.text();
+    } catch (e) {
+      console.error("Failed to parse error response body:", e);
+    }
+  }
+  throw new Error(`DeepSeek API Error (Status ${response.status}): ${errorDetails}`);
+};
+
 export const handleDeepSeekRequest = async (
   request: ChatRequest
 ): Promise<ChatResponse> => {
@@ -8,15 +29,8 @@ export const handleDeepSeekRequest = async (
     throw new Error("DeepSeek API key is not configured.");
   }
 
-  // Map custom UI model IDs to actual DeepSeek API model endpoints
-  let actualModel = request.model;
-  if (actualModel === "deepseek-v4-flash") {
-    actualModel = "deepseek-chat";
-  } else if (actualModel === "deepseek-v4-pro") {
-    actualModel = "deepseek-reasoner";
-  }
+  const actualModel = getActualModel(request.model);
 
-  // Use OpenAI compatible endpoint for DeepSeek
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: {
@@ -36,16 +50,7 @@ export const handleDeepSeekRequest = async (
   });
 
   if (!response.ok) {
-    let errorDetails = "Unknown error";
-    try {
-      const errJson = await response.json();
-      errorDetails = errJson.error?.message || JSON.stringify(errJson);
-    } catch {
-      try {
-        errorDetails = await response.text();
-      } catch {}
-    }
-    throw new Error(`DeepSeek API Error (Status ${response.status}): ${errorDetails}`);
+    await handleApiError(response);
   }
 
   const data = await response.json();
@@ -65,12 +70,7 @@ export const handleDeepSeekStream = async (
     throw new Error("DeepSeek API key is not configured.");
   }
 
-  let actualModel = request.model;
-  if (actualModel === "deepseek-v4-flash") {
-    actualModel = "deepseek-chat";
-  } else if (actualModel === "deepseek-v4-pro") {
-    actualModel = "deepseek-reasoner";
-  }
+  const actualModel = getActualModel(request.model);
 
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -94,16 +94,7 @@ export const handleDeepSeekStream = async (
   });
 
   if (!response.ok) {
-    let errorDetails = "Unknown error";
-    try {
-      const errJson = await response.json();
-      errorDetails = errJson.error?.message || JSON.stringify(errJson);
-    } catch {
-      try {
-        errorDetails = await response.text();
-      } catch {}
-    }
-    throw new Error(`DeepSeek API Error (Status ${response.status}): ${errorDetails}`);
+    await handleApiError(response);
   }
 
   const encoder = new TextEncoder();
@@ -127,31 +118,22 @@ export const handleDeepSeekStream = async (
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
-          
-          // Save the last partial line back to buffer
           buffer = lines.pop() || "";
 
           for (const line of lines) {
             const cleanLine = line.trim();
-            if (!cleanLine) continue;
+            if (!cleanLine || !cleanLine.startsWith("data: ")) continue;
 
-            if (cleanLine.startsWith("data: ")) {
-              const dataStr = cleanLine.slice(6).trim();
-              if (dataStr === "[DONE]") {
-                break;
-              }
-              try {
-                const json = JSON.parse(dataStr);
-                const chunkText = json.choices?.[0]?.delta?.content || "";
-                if (chunkText) {
-                  controller.enqueue(encoder.encode(chunkText));
-                }
-                if (json.usage) {
-                  finalUsage = json.usage;
-                }
-              } catch (e) {
-                console.error("Failed to parse DeepSeek SSE JSON chunk:", dataStr, e);
-              }
+            const dataStr = cleanLine.slice(6).trim();
+            if (dataStr === "[DONE]") continue;
+
+            try {
+              const json = JSON.parse(dataStr);
+              const chunkText = json.choices?.[0]?.delta?.content || "";
+              if (chunkText) controller.enqueue(encoder.encode(chunkText));
+              if (json.usage) finalUsage = json.usage;
+            } catch (e) {
+              console.error("Failed to parse DeepSeek SSE JSON chunk:", dataStr, e);
             }
           }
         }
